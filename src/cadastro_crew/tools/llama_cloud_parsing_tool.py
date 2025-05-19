@@ -42,8 +42,8 @@ class LlamaParseDirectToolSchema(BaseModel):
         description="Instruções específicas para o parseamento, por exemplo, para focar em tabelas ou texto."
     )
     language: Optional[str] = Field(
-        default="por", 
-        description="Idioma do documento (padrão: 'por' para português). Use códigos ISO 639-1."
+        default="pt", 
+        description="Idioma do documento (padrão: 'pt' para português). Use códigos ISO 639-1."
     )
     result_as_markdown: Optional[bool] = Field(
         default=True,
@@ -123,6 +123,9 @@ class LlamaParseDirectTool(BaseTool):
         if not api_key_to_use:
             logger.error("LlamaCloud API Key não fornecida nem como argumento nem como variável de ambiente.")
 
+        # Corrigir o código de idioma se for passado 'por'
+        actual_language = "pt" if language.lower() == "por" else language
+
         # Usar strings diretamente para o modo, conforme a documentação de LlamaParse
         # sugere que "simple" ou "detailed" como strings são aceitáveis.
         mode_to_use_str = "detailed" if preset == "detailed" else "simple"
@@ -130,7 +133,7 @@ class LlamaParseDirectTool(BaseTool):
         return LlamaParse(
             api_key=api_key_to_use,
             result_type="markdown" if result_as_markdown else "text",
-            language=language,
+            language=actual_language,
             mode=mode_to_use_str # Usando o string diretamente
         )
 
@@ -186,7 +189,7 @@ class LlamaParseDirectTool(BaseTool):
         file_path: Optional[str] = None,
         parsing_preset: ParsingPreset = "simple", 
         parsing_instructions: Optional[str] = None,
-        language: str = "por", 
+        language: str = "pt", 
         result_as_markdown: bool = True
     ) -> str:
         """
@@ -266,7 +269,7 @@ class LlamaParseDirectTool(BaseTool):
         file_path: Optional[str] = None,
         parsing_preset: ParsingPreset = "simple",
         parsing_instructions: Optional[str] = None,
-        language: str = "por", 
+        language: str = "pt", 
         result_as_markdown: bool = True
     ) -> str:
         """

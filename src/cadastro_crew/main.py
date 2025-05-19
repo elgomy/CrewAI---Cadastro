@@ -6,6 +6,8 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 from pathlib import Path # Adicionado para manipulação de caminhos
+import yaml
+from supabase import create_client, Client # Added supabase imports
 
 from .crew import CadastroCrew
 from .tools import SupabaseDocumentContentTool # Importar a nova ferramenta
@@ -18,7 +20,26 @@ warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 # interpolate any tasks and agents information
 
 # Carregar variáveis de ambiente do arquivo .env
-load_dotenv()
+# É bom chamar isso o mais cedo possível.
+dotenv_path = Path(__file__).resolve().parent.parent.parent / '.env'
+print(f"INFO: Caminho construído para .env: {dotenv_path}")
+print(f"INFO: Verificando existência de .env em {dotenv_path}: {dotenv_path.exists()}")
+
+# Tentar carregar o .env e verificar o resultado
+loaded_env = load_dotenv(dotenv_path=dotenv_path, verbose=True) # verbose=True pode dar mais output
+print(f"INFO: Resultado de load_dotenv(verbose=True): {loaded_env}")
+
+# Logs para depuração da carga do .env
+# Removido o print anterior "Tentando carregar..." pois agora temos mais detalhes
+
+# Adicionar uma verificação imediata para ver se as variáveis foram carregadas
+print(f"DEBUG PÓS-LOAD_DOTENV: SUPABASE_URL é: [{os.getenv('SUPABASE_URL')}]")
+print(f"DEBUG PÓS-LOAD_DOTENV: SUPABASE_SERVICE_KEY (esperado) é: [{os.getenv('SUPABASE_SERVICE_KEY')}]")
+
+if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_SERVICE_KEY"):
+    print(f"ALERTA PÓS-LOAD_DOTENV: SUPABASE_URL ou SUPABASE_SERVICE_KEY (esperado) não foram efetivamente carregadas no ambiente.")
+else:
+    print("INFO PÓS-LOAD_DOTENV: SUPABASE_URL e SUPABASE_SERVICE_KEY (esperado) parecem estar no ambiente após load_dotenv.")
 
 # ID do projeto Supabase (deve ser o 'id' alfanumérico, não o 'name')
 SUPABASE_PROJECT_ID = os.getenv("SUPABASE_PROJECT_ID", "aguoqgqbdbyipztgrmbd") # Usar o ID correto
@@ -29,110 +50,130 @@ CLIENT_DOC_CONTRATO_NAME = "4- CONTRATO SOCIAL AD PRODUTOS E SERVIÇOS.pdf"
 # Adicione outros nomes de documentos do cliente aqui se necessário
 # CLIENT_DOC_CNPJ_NAME = "1- CNPJ.pdf"
 
-def get_checklist_from_app_configs(project_id: str, config_name: str) -> str:
-    """
-    Obtém o conteúdo do checklist da tabela 'app_configs' no Supabase.
-    Esta função simula a necessidade de uma chamada a Supabase, idealmente usando
-    uma biblioteca cliente ou uma ferramenta MCP configurada.
-    Para este exemplo, vamos hardcodear a lógica de como se faria com mcp_supabase_execute_sql
-    se estivesse diretamente disponível ou se usássemos o cliente python supabase.
-    """
-    print(f"INFO: Tentando obter o checklist \'{config_name}\' da tabela app_configs.")
+# Declaração global para o cliente Supabase, será inicializado em setup_supabase_client()
+supabase_client: Client | None = None
+
+def setup_supabase_client() -> Client | None:
+    """Inicializa e retorna o cliente Supabase. Retorna None em caso de falha."""
+    global supabase_client
+    if supabase_client is not None:
+        return supabase_client
+
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+
+    if not supabase_url or not supabase_key:
+        print("Erro Crítico: As variáveis de ambiente SUPABASE_URL e SUPABASE_SERVICE_KEY devem ser definidas no arquivo .env.")
+        # Considerar não sair aqui, mas permitir que run() falhe graciosamente ou retorne um erro.
+        # exit(1) # Ou raise uma exceção específica
+        return None 
     
-    # Esta é uma representação simplificada. Em um cenário real com MCP,
-    # você chamaria algo como:
-    # from some_mcp_library import mcp_supabase_execute_sql
-    # response = mcp_supabase_execute_sql(project_id=project_id, query=f"SELECT content FROM app_configs WHERE config_name = \'{config_name}\' LIMIT 1;")
-    # e depois parsearia a resposta.
-    # Como não posso chamar mcp_supabase_execute_sql diretamente daqui sem a tool_code,
-    # e para manter o main.py executável de forma independente para testes locais se necessário,
-    # esta função precisaria ser adaptada ou ter o cliente Supabase injetado/disponível.
-    # Por simplicidade, vamos assumir que a crewAI em si (ou uma ferramenta) faria esta consulta.
-    # No contexto de um script que prepara inputs para a Crew, o ideal seria usar o cliente Supabase padrão.
-    
-    # Simulação de falha para demonstração se o SUPABASE_URL/KEY não estiverem setados para uma chamada real.
-    # Em um contexto onde este script é executado e as MCPs não estão disponíveis para ele diretamente:
     try:
-        from supabase import create_client, Client
-        supabase_url: str = os.environ.get("SUPABASE_URL")
-        supabase_key: str = os.environ.get("SUPABASE_SERVICE_KEY") # Usar service key para ler configs
-        if not supabase_url or not supabase_key:
-            raise EnvironmentError("SUPABASE_URL e SUPABASE_SERVICE_KEY devem estar definidos no .env para carregar o checklist.")
-        
-        supabase: Client = create_client(supabase_url, supabase_key)
-        response = supabase.table('app_configs').select('content').eq('config_name', config_name).limit(1).execute()
-        
-        if response.data and len(response.data) > 0:
-            content = response.data[0].get('content')
-            if content:
-                print(f"INFO: Checklist \'{config_name}\' carregado com sucesso da app_configs. Tamanho: {len(content)}")
-                return content
-            else:
-                raise ValueError(f"Checklist \'{config_name}\' encontrado na app_configs, mas o conteúdo está vazio.")
-        else:
-            raise ValueError(f"Checklist \'{config_name}\' não encontrado na tabela app_configs ou dados inacessíveis.")
-            
-    except ImportError:
-        print("AVISO: A biblioteca \'supabase-py\' não está instalada. Não é possível carregar o checklist dinamicamente. Retornando placeholder.")
-        print("Execute: pip install supabase")
-        raise ValueError("Biblioteca supabase-py não instalada, não é possível carregar o checklist.")
-    except EnvironmentError as e:
-        print(f"ERRO DE AMBIENTE: {e}")
-        raise
+        supabase_client = create_client(supabase_url, supabase_key)
+        print("INFO: Cliente Supabase inicializado com sucesso em main.py (usando SERVICE_KEY conforme especificado).")
+        return supabase_client
     except Exception as e:
-        print(f"ERRO CRÍTICO ao tentar obter o checklist \'{config_name}\' da app_configs: {e}")
-        raise
+        print(f"Erro Crítico: Falha ao inicializar o cliente Supabase em main.py: {e}")
+        return None
+
+def get_checklist_content_from_app_configs(client: Client, config_name: str = "checklist_cadastro_pj") -> str:
+    """
+    Obtém o conteúdo do checklist da tabela app_configs no Supabase.
+    """
+    if not client:
+        print("Erro: Cliente Supabase não inicializado para get_checklist_content_from_app_configs.")
+        return ""
+    try:
+        response = client.table("app_configs").select("content").eq("config_name", config_name).single().execute()
+        if response.data and response.data.get("content"):
+            # print(f"Checklist '{config_name}' carregado de app_configs.")
+            return response.data["content"]
+        else:
+            print(f"Erro: Checklist '{config_name}' não encontrado na tabela app_configs ou conteúdo vazio.")
+            return "" # Retorna string vazia para evitar falha total, mas idealmente tratar o erro.
+    except Exception as e:
+        print(f"Erro ao buscar checklist de app_configs: {e}")
+        return ""
+
+def get_documents_for_case(client: Client, case_id: str) -> list:
+    """
+    Obtém a lista de documentos e seus tags para um case_id específico da tabela documents.
+    """
+    if not client:
+        print("Erro: Cliente Supabase não inicializado para get_documents_for_case.")
+        return []
+        
+    document_list_for_crew = []
+    # Mapeamento de document_tag (BD) para o 'type' esperado pela Crew/Agentes
+    tag_to_crew_type_map = {
+        "contrato_social": "ContratoSocial",
+        "cnpj": "CNPJ",
+        "comp_endereco_socio": "ComprovanteEnderecoSocio",
+        "qsa": "QuadroSocietario",
+        "doc_id_socio": "DocumentoIdentificacaoSocio",
+        "certidao_simplificada": "CertidaoSimplificada",
+        # Adicione outros mapeamentos conforme necessário
+    }
+
+    try:
+        response = client.table("documents").select("name, document_tag").eq("case_id", case_id).execute()
+        if response.data:
+            for doc in response.data:
+                doc_name = doc.get("name")
+                doc_tag = doc.get("document_tag")
+                crew_doc_type = tag_to_crew_type_map.get(doc_tag)
+
+                if doc_name and crew_doc_type: # Só adiciona se tiver nome e um tipo mapeado
+                    document_list_for_crew.append({
+                        "type": crew_doc_type,
+                        "name": doc_name,
+                        "case_id": case_id  # O case_id é o mesmo para todos os documentos deste caso
+                    })
+                elif doc_name and not crew_doc_type:
+                    print(f"Aviso: Documento '{doc_name}' com tag '{doc_tag}' não possui mapeamento para tipo da crew. Será ignorado nos inputs.")
+            # print(f"Documentos para o case_id '{case_id}' carregados dinamicamente: {document_list_for_crew}")
+        else:
+            print(f"Nenhum documento encontrado para o case_id '{case_id}' na tabela documents.")
+        return document_list_for_crew
+    except Exception as e:
+        print(f"Erro ao buscar documentos para o case_id '{case_id}': {e}")
+        return []
 
 def run():
     """
     Função principal para configurar e executar a CadastroCrew.
     """
     print("INFO: Iniciando a execução da CadastroCrew a partir de main.py...")
+    
+    # Inicializar o cliente Supabase
+    s_client = setup_supabase_client()
+    if not s_client:
+        print("ERRO FATAL: Não foi possível inicializar o cliente Supabase. Saindo.")
+        return
 
     try:
         # Obter o conteúdo do checklist da tabela app_configs
-        parsed_checklist_content = get_checklist_from_app_configs(SUPABASE_PROJECT_ID, CHECKLIST_CONFIG_NAME)
+        parsed_checklist_content = get_checklist_content_from_app_configs(s_client)
     except Exception as e: # Captura exceções mais genéricas da carga do checklist
         print(f"ERRO FATAL: Não foi possível carregar o checklist. {e}")
-        print("Verifique a configuração do Supabase (URL, KEY) e a existência do item na tabela \'app_configs\'.")
+        print("Verifique a configuração do Supabase (URL, KEY) e a existência do item na tabela 'app_configs'.")
         return # Abortar se o checklist não puder ser carregado
 
     # Inputs para a crew
     case_id = os.getenv('CASE_ID', 'CASO-CLIENTE-REAL-001')
+
+    # Obter dinamicamente a lista de documentos para o case_id
+    dynamic_documents_list = get_documents_for_case(s_client, case_id)
+
+    if not dynamic_documents_list:
+        print(f"Nenhum documento configurado para ser processado para o case_id '{case_id}'. Verifique a tabela 'documents' e os 'document_tag'.")
+        # Poderia abortar aqui ou continuar dependendo da lógica desejada
+        # return 
+    
+    # Inputs para a crew
     inputs = {
         'case_id': case_id,
-        'documents': [
-            {
-                'type': 'ContratoSocial',
-                'name': CLIENT_DOC_CONTRATO_NAME,
-                'case_id': case_id
-            },
-            {
-                'type': 'CNPJ',
-                'name': '1- CNPJ.pdf',
-                'case_id': case_id
-            },
-            {
-                'type': 'ComprovanteEnderecoSocio',
-                'name': '7- COMP ENDEREÇO SOCIO REF 062024.pdf',
-                'case_id': case_id
-            },
-            {
-                'type': 'QuadroSocietario',
-                'name': '1.1- QSA.pdf',
-                'case_id': case_id
-            },
-            {
-                'type': 'DocumentoIdentificacaoSocio',
-                'name': '6- CNH ATUAL.pdf',
-                'case_id': case_id
-            },
-            {
-                'type': 'CertidaoSimplificada',
-                'name': '4- Certidao Simplificada - 06.2024.pdf',
-                'case_id': case_id
-            }
-        ],
+        'documents': dynamic_documents_list, # Lista de documentos carregada dinamicamente
         'checklist': parsed_checklist_content, 
         'current_date': datetime.now().strftime('%Y-%m-%d'),
         'dados_pj.cnpj': os.getenv('DADOS_PJ_CNPJ_FALLBACK', ''), # Este CNPJ é para a tarefa_geracao_relatorio

@@ -10,11 +10,11 @@ from supabase import create_client, Client as SupabaseClient
 from sentence_transformers import SentenceTransformer
 
 # --- Configuração da Knowledge Base (Supabase) ---
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY") # Use a service_role key
-KB_TABLE_NAME = os.getenv("KB_TABLE_NAME", "knowledge_base_chunks") # Nome da tabela no Supabase
-# Modelo de embedding (escolha um bom modelo multilíngue se a KB tiver conteúdo misto)
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
+# REMOVER a leitura de variáveis de ambiente daqui
+# SUPABASE_URL = os.getenv("SUPABASE_URL")
+# SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY") 
+KB_TABLE_NAME_DEFAULT = "knowledge_base_chunks"
+EMBEDDING_MODEL_NAME_DEFAULT = "sentence-transformers/all-MiniLM-L6-v2"
 
 class KnowledgeBaseQueryToolSchema(BaseModel):
     """Define os argumentos para a ferramenta de consulta à Knowledge Base (Pydantic V2)."""
@@ -40,30 +40,43 @@ class KnowledgeBaseQueryTool(BaseTool):
     _supabase_client: Optional[SupabaseClient] = None
     _embedding_model: Optional[SentenceTransformer] = None
 
+    # Adicionar variáveis para armazenar as configs que antes eram globais
+    _supabase_url: Optional[str] = None
+    _supabase_service_key: Optional[str] = None
+    _kb_table_name: str = KB_TABLE_NAME_DEFAULT
+    _embedding_model_name: str = EMBEDDING_MODEL_NAME_DEFAULT
+
     def __init__(self, **kwargs):
         """
         Inicializa a ferramenta, o cliente Supabase e o modelo de embedding.
+        As variáveis de ambiente são lidas AQUI, no momento da instanciação.
         """
         super().__init__(**kwargs)
-        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-            print("ALERTA: Variáveis de ambiente SUPABASE_URL e SUPABASE_SERVICE_KEY não configuradas.")
-            # Poderia levantar ValueError se for um requisito estrito
+
+        # Ler as variáveis de ambiente no momento da instanciação
+        self._supabase_url = os.getenv("SUPABASE_URL")
+        self._supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY")
+        self._kb_table_name = os.getenv("KB_TABLE_NAME", KB_TABLE_NAME_DEFAULT)
+        self._embedding_model_name = os.getenv("EMBEDDING_MODEL_NAME", EMBEDDING_MODEL_NAME_DEFAULT)
+
+        if not self._supabase_url or not self._supabase_service_key:
+            print(f"ALERTA (KnowledgeBaseQueryTool): Variáveis SUPABASE_URL ({self._supabase_url is not None}) ou SUPABASE_SERVICE_KEY ({self._supabase_service_key is not None}) não configuradas ou faltando. A ferramenta pode não funcionar.")
             self._supabase_client = None
             self._embedding_model = None
             return
 
         try:
-            self._supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+            self._supabase_client = create_client(self._supabase_url, self._supabase_service_key)
             print("INFO: Cliente Supabase inicializado para a KnowledgeBaseQueryTool.")
         except Exception as e:
-            print(f"ERRO CRÍTICO: Não foi possível inicializar o cliente Supabase: {e}")
+            print(f"ERRO CRÍTICO (KnowledgeBaseQueryTool): Não foi possível inicializar o cliente Supabase: {e}")
             self._supabase_client = None
 
         try:
-            self._embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-            print(f"INFO: Modelo de embedding '{EMBEDDING_MODEL_NAME}' carregado.")
+            self._embedding_model = SentenceTransformer(self._embedding_model_name)
+            print(f"INFO: Modelo de embedding \'{self._embedding_model_name}\' carregado para KnowledgeBaseQueryTool.")
         except Exception as e:
-            print(f"ERRO CRÍTICO: Não foi possível carregar o modelo de embedding '{EMBEDDING_MODEL_NAME}': {e}")
+            print(f"ERRO CRÍTICO (KnowledgeBaseQueryTool): Não foi possível carregar o modelo de embedding \'{self._embedding_model_name}\': {e}")
             self._embedding_model = None
 
     def _run(self, query: str, top_k: int = 3) -> str:
@@ -79,10 +92,10 @@ class KnowledgeBaseQueryTool(BaseTool):
         if not query:
             return "ERRO: A query para a Knowledge Base não pode ser vazia."
         
-        if not KB_TABLE_NAME:
+        if not self._kb_table_name:
             return "ERRO: Nome da tabela da Knowledge Base (KB_TABLE_NAME) não configurado."
 
-        print(f"INFO: Recebida query para KB: '{query}', top_k={top_k}")
+        print(f"INFO (KnowledgeBaseQueryTool): Recebida query para KB: \'{query}\', top_k={top_k}")
 
         try:
             # 1. Gerar embedding para a query
@@ -173,27 +186,19 @@ if __name__ == '__main__':
     # os.environ['KB_TABLE_NAME'] = 'knowledge_base_chunks' # ou o nome da sua tabela
     # os.environ['EMBEDDING_MODEL_NAME'] = 'sentence-transformers/all-MiniLM-L6-v2'
 
-    if not all([SUPABASE_URL, SUPABASE_SERVICE_KEY, KB_TABLE_NAME]):
-        print(("\nERRO: Variáveis de ambiente SUPABASE_URL, SUPABASE_SERVICE_KEY e KB_TABLE_NAME "
-               "não configuradas. Defina-as para testar."))
-        exit(1)
+    # kb_tool: Optional[KnowledgeBaseQueryTool] = None
+    # try:
+    #     kb_tool = KnowledgeBaseQueryTool()
+    #     # A verificação de inicialização agora deve ser baseada nos atributos da instância
+    #     if not kb_tool._supabase_client or not kb_tool._embedding_model:
+    #         print("ERRO: Falha na inicialização da ferramenta KBTool. Verifique os logs de alerta/erro da ferramenta.")
+    #         exit(1)
+    # except Exception as e:
+    #     print(f"ERRO ao instanciar a ferramenta KBTool: {e}")
+    #     exit(1)
 
-    kb_tool: Optional[KnowledgeBaseQueryTool] = None
-    try:
-        kb_tool = KnowledgeBaseQueryTool()
-        if not kb_tool._supabase_client or not kb_tool._embedding_model:
-            print("ERRO: Falha na inicialização da ferramenta KBTool. Verifique os logs.")
-            exit(1)
-    except Exception as e:
-        print(f"ERRO ao instanciar a ferramenta KBTool: {e}")
-        exit(1)
-
-    print("\nINFO: Ferramenta KBTool instanciada. Lembre-se que este teste requer:")
-    print(f"      1. Uma instância Supabase acessível em {SUPABASE_URL}.")
-    print(f"      2. A extensão pgvector habilitada no Supabase.")
-    print(f"      3. Uma tabela chamada '{KB_TABLE_NAME}' com colunas (ex: 'content' TEXT, 'embedding' VECTOR(384)).")
-    print(f"      4. Uma função RPC chamada 'match_kb_chunks' (ou similar) criada no Supabase para busca vetorial.")
-    print(f"      5. Dados indexados na tabela '{KB_TABLE_NAME}'.")
+    # As mensagens de print sobre requisitos ainda são válidas, mas o acesso direto
+    # a SUPABASE_URL e KB_TABLE_NAME a partir daqui não reflete o estado da instância.
 
     queries_de_teste = [
         "Qual a política para validação de Contrato Social emitido há mais de 3 anos?",

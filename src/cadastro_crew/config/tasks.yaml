@@ -7,8 +7,9 @@
 tarefa_validacao_documental:
   description: |
     Realize uma análise completa e rigorosa de todos os documentos fornecidos para o caso '{case_id}'.
-    Para cada documento na lista '{documents}', utilize a ferramenta 'Supabase Document Content Retriever' passando o nome do arquivo (a chave 'name' de cada item da lista '{documents}') E o ID do caso ('{case_id}') para obter o seu conteúdo textual pré-parseado da base de dados.
-    Após obter o conteúdo de cada documento, verifique sua presença, legibilidade básica e conformidade com CADA item do checklist normativo brasileiro fornecido no parâmetro '{checklist}'.
+    Para cada documento na lista '{documents}', primeiro utilize a ferramenta 'Supabase Document Info Retriever' passando o nome do arquivo (a chave 'name' de cada item da lista '{documents}') E o ID do caso ('{case_id}') para obter um JSON contendo a URL do arquivo ('file_url') e outros metadados.
+    Em seguida, extraia a 'file_url' do JSON retornado e utilize a ferramenta 'LlamaParse Direct Document Parser' passando essa 'file_url' para obter o conteúdo textual parseado do documento. Assegure-se de usar o preset de parseamento 'simple' e resultado como markdown (que são os padrões da ferramenta).
+    Após obter o conteúdo parseado de cada documento, verifique sua presença, legibilidade básica e conformidade com CADA item do checklist normativo brasileiro fornecido no parâmetro '{checklist}'.
     O checklist detalha os critérios para:
     a) Documentos Cadastrais da PJ.
     b) Documentos Financeiros da PJ.
@@ -22,7 +23,7 @@ tarefa_validacao_documental:
     Um relatório estruturado (preferencialmente JSON ou Markdown formatado) detalhando, para CADA item do checklist fornecido:
     1. Nome do Documento/Item do Checklist.
     2. Documento Correspondente Encontrado (Sim/Não/Não Aplicável).
-    3. Arquivo(s) Analisado(s) para este item (nome do arquivo ou URL).
+    3. Arquivo(s) Analisado(s) para este item (nome do arquivo ou a file_url usada para o parseamento).
     4. Status da Validação (Conforme/Não Conforme/Pendência/Não Aplicável).
     5. Observações Claras e Concisas: Detalhar o motivo de qualquer "Não Conforme" ou "Pendência" (ex: "Cartão CNPJ emitido há 120 dias - FORA DO PRAZO", "Faturamento não assinado pelo contador", "Comprovante de residência do sócio X com data de emissão superior a 90 dias"), referenciando a regra específica do checklist.
     6. Referência da Knowledge Base (se consultada e relevante para a decisão).
@@ -33,8 +34,9 @@ tarefa_validacao_documental:
 tarefa_extracao_dados:
   description: |
     Para o caso '{case_id}', processe todos os documentos relevantes listados em '{documents}'. 
-    Para cada documento na lista '{documents}', primeiro utilize a ferramenta 'Supabase Document Content Retriever' passando o nome do arquivo (a chave 'name' de cada item da lista '{documents}') E o ID do caso ('{case_id}') para obter o seu conteúdo textual pré-parseado da base de dados.
-    Uma vez que tenha o conteúdo textual de um documento, sua missão é extrair meticulosamente os seguintes campos de informação para a montagem de um dossiê cadastral completo. Seja exaustivo e preciso.
+    Para cada documento na lista '{documents}', primeiro utilize a ferramenta 'Supabase Document Info Retriever' passando o nome do arquivo (a chave 'name' de cada item da lista '{documents}') E o ID do caso ('{case_id}') para obter um JSON contendo a URL do arquivo ('file_url') e outros metadados.
+    Em seguida, extraia a 'file_url' do JSON retornado e utilize a ferramenta 'LlamaParse Direct Document Parser' passando essa 'file_url' para obter o conteúdo textual parseado do documento. Assegure-se de usar o preset de parseamento 'simple' e resultado como markdown.
+    Uma vez que tenha o conteúdo textual parseado de um documento, sua missão é extrair meticulosamente os seguintes campos de informação para a montagem de um dossiê cadastral completo. Seja exaustivo e preciso.
     Campos a Extrair:
     1.  Da Pessoa Jurídica (PJ):
         - Razão Social Completa
@@ -78,15 +80,19 @@ tarefa_extracao_dados:
 # Tarefas para o Agente Analista de Risco
 tarefa_analise_risco_inconsistencias:
   description: |
-    Com base no **resultado da tarefa de validação documental anterior (disponível no contexto como texto/markdown)** e nos dados extraídos da tarefa de extração (também no contexto) para o caso '{case_id}', sua missão é conduzir uma análise de risco aprofundada.
-    1.  Revise o **resultado da validação documental provido no contexto**. Se houver pendências críticas, destaque-as.
-    2.  Cruze TODAS as informações extraídas (Nomes, CPFs, CNPJs, Endereços, Datas, etc.) entre os diferentes documentos parseados. Identifique e liste CADA divergência encontrada, por menor que seja (ex: grafia do nome, número do documento, datas, endereço no Cartão CNPJ vs. Contrato Social vs. Comprovante de Residência do Sócio).
-    3.  Utilize a ferramenta 'Serper Search Tool' (ou ferramenta de busca web configurada) para validar informações públicas sobre a empresa (CNPJ: '{dados_pj.cnpj}') e seus principais sócios/representantes (CPFs: '{lista_cpfs_socios}'). Verifique:
-        - Situação cadastral do CNPJ em fontes oficiais (Receita Federal).
-        - Reputação da empresa e sócios (notícias, processos, reclamações).
+    Sua missão é conduzir uma análise de risco aprofundada para o caso '{case_id}'.
+    **Baseie-se EXCLUSIVAMENTE no relatório de validação documental e no dossiê cadastral completo fornecidos no seu CONTEXTO.**
+    **NÃO utilize as ferramentas 'Supabase Document Info Retriever' ou 'LlamaParse Direct Document Parser' para esta tarefa de análise de risco, pois os documentos já foram processados nas etapas anteriores e seus conteúdos relevantes estão no dossiê.**
+
+    Siga estes passos:
+    1.  Revise o **relatório de validação documental provido no contexto**. Se houver pendências críticas (ex: documentos ausentes, ilegíveis ou flagrantemente inválidos conforme o relatório de validação), destaque-as claramente em seu parecer final.
+    2.  Cruze TODAS as informações presentes no **dossiê cadastral completo (provido no contexto)**. Identifique e liste CADA divergência encontrada entre os dados consolidados neste dossiê (ex: diferença de nome do sócio entre o que consta na seção PJ e na seção de sócios do dossiê, datas inconsistentes, etc.). Não tente re-validar estas informações parseando documentos novamente.
+    3.  Do dossiê cadastral completo (disponível no seu contexto), obtenha o CNPJ da empresa e os CPFs dos sócios/representantes. Utilize a ferramenta 'Serper Search Tool' para validar estas informações públicas. Verifique:
+        - Situação cadastral do CNPJ (obtido do contexto) em fontes oficiais (Receita Federal).
+        - Reputação da empresa e sócios (usando o CNPJ e CPFs obtidos do contexto) (notícias, processos, reclamações).
         - Confirmação de endereços (Google Maps, sites oficiais).
-    4.  Consulte a 'Knowledge Base Query Tool' com queries como "padrões de fraude para empresas do setor X no Brasil", "alertas de risco para CNPJ {dados_pj.cnpj}", "histórico de inconsistências para sócio com CPF {cpf_socio_principal}", ou "casos similares de validação para empresas com faturamento na faixa de {dados_pj.faturamento}".
-    5.  Com base em todas as análises (divergências documentais, validação web, consulta à KB), elabore um parecer de risco.
+    4.  Do dossiê cadastral, obtenha também o CNPJ, CPF do sócio principal e faturamento (se disponível). Consulte a 'Knowledge Base Query Tool' com queries como "padrões de fraude para empresas do setor X no Brasil", "alertas de risco para CNPJ [CNPJ do contexto]", "histórico de inconsistências para sócio com CPF [CPF do sócio principal do contexto]", ou "casos similares de validação para empresas com faturamento na faixa de [faturamento do contexto]".
+    5.  Com base em todas as análises (pendências do relatório de validação, divergências internas do dossiê, validação web, consulta à KB), elabore um parecer de risco. **O seu "Final Answer" DEVE SER este parecer de risco completo, seguindo ESTRITAMENTE o formato detalhado em 'expected_output'. Não retorne dados parciais ou entradas de ferramentas como sua resposta final.**
   expected_output: |
     Um relatório consolidado em formato Markdown contendo as seguintes seções:
     1.  **Sumário do Caso:** Breve resumo do caso '{case_id}'.
