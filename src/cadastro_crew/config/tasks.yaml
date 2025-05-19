@@ -7,7 +7,7 @@
 tarefa_validacao_documental:
   description: |
     Realize uma análise completa e rigorosa de todos os documentos fornecidos para o caso '{case_id}'.
-    Para cada documento na lista '{documents}', utilize a ferramenta 'Supabase Document Content Retriever' passando o nome do arquivo (a chave 'name' de cada item da lista '{documents}') para obter o seu conteúdo textual pré-parseado da base de dados.
+    Para cada documento na lista '{documents}', utilize a ferramenta 'Supabase Document Content Retriever' passando o nome do arquivo (a chave 'name' de cada item da lista '{documents}') E o ID do caso ('{case_id}') para obter o seu conteúdo textual pré-parseado da base de dados.
     Após obter o conteúdo de cada documento, verifique sua presença, legibilidade básica e conformidade com CADA item do checklist normativo brasileiro fornecido no parâmetro '{checklist}'.
     O checklist detalha os critérios para:
     a) Documentos Cadastrais da PJ.
@@ -33,7 +33,7 @@ tarefa_validacao_documental:
 tarefa_extracao_dados:
   description: |
     Para o caso '{case_id}', processe todos os documentos relevantes listados em '{documents}'. 
-    Para cada documento na lista '{documents}', primeiro utilize a ferramenta 'Supabase Document Content Retriever' passando o nome do arquivo (a chave 'name' de cada item da lista '{documents}') para obter o seu conteúdo textual pré-parseado da base de dados.
+    Para cada documento na lista '{documents}', primeiro utilize a ferramenta 'Supabase Document Content Retriever' passando o nome do arquivo (a chave 'name' de cada item da lista '{documents}') E o ID do caso ('{case_id}') para obter o seu conteúdo textual pré-parseado da base de dados.
     Uma vez que tenha o conteúdo textual de um documento, sua missão é extrair meticulosamente os seguintes campos de informação para a montagem de um dossiê cadastral completo. Seja exaustivo e preciso.
     Campos a Extrair:
     1.  Da Pessoa Jurídica (PJ):
@@ -78,8 +78,8 @@ tarefa_extracao_dados:
 # Tarefas para o Agente Analista de Risco
 tarefa_analise_risco_inconsistencias:
   description: |
-    Com base no relatório de validação documental e nos dados extraídos para o caso '{case_id}', sua missão é conduzir uma análise de risco aprofundada.
-    1.  Revise o relatório de validação documental. Se houver pendências críticas, destaque-as.
+    Com base no **resultado da tarefa de validação documental anterior (disponível no contexto como texto/markdown)** e nos dados extraídos da tarefa de extração (também no contexto) para o caso '{case_id}', sua missão é conduzir uma análise de risco aprofundada.
+    1.  Revise o **resultado da validação documental provido no contexto**. Se houver pendências críticas, destaque-as.
     2.  Cruze TODAS as informações extraídas (Nomes, CPFs, CNPJs, Endereços, Datas, etc.) entre os diferentes documentos parseados. Identifique e liste CADA divergência encontrada, por menor que seja (ex: grafia do nome, número do documento, datas, endereço no Cartão CNPJ vs. Contrato Social vs. Comprovante de Residência do Sócio).
     3.  Utilize a ferramenta 'Serper Search Tool' (ou ferramenta de busca web configurada) para validar informações públicas sobre a empresa (CNPJ: '{dados_pj.cnpj}') e seus principais sócios/representantes (CPFs: '{lista_cpfs_socios}'). Verifique:
         - Situação cadastral do CNPJ em fontes oficiais (Receita Federal).
