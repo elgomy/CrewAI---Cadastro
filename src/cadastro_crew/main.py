@@ -5,6 +5,7 @@ from textwrap import dedent
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+from pathlib import Path # Adicionado para manipulação de caminhos
 
 from .crew import CadastroCrew
 from .tools import SupabaseDocumentContentTool # Importar a nova ferramenta
@@ -144,10 +145,43 @@ def run():
     cadastro_crew = CadastroCrew(inputs=inputs)
     print("INFO: Iniciando a execução do método run() do CadastroCrew...")
     try:
-        resultado = cadastro_crew.run() 
+        resultado = cadastro_crew.run()
         print("\n---\nRESULTADO FINAL DA EXECUÇÃO DO CREW:\n")
         print(resultado)
         print("---")
+
+        # Salvar o resultado em um arquivo Markdown
+        try:
+            # Determinar o diretório raiz do projeto (assumindo que main.py está em src/cadastro_crew)
+            project_root = Path(__file__).resolve().parent.parent.parent 
+            reports_dir = project_root / "reports"
+            reports_dir.mkdir(parents=True, exist_ok=True) # Cria o diretório se não existir
+
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            file_name = f"relatorio_crew_{timestamp}.md"
+            file_path = reports_dir / file_name
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(f"# Relatório da Execução da Crew - {timestamp}\\n\\n")
+                f.write("## Inputs Fornecidos:\\n\\n")
+                # Para não expor chaves de API ou conteúdo muito longo do checklist nos inputs do relatório
+                safe_inputs_to_log = {k: v for k, v in inputs.items() if k != 'checklist'}
+                safe_inputs_to_log['checklist_length'] = len(inputs.get('checklist', ''))
+                
+                import json
+                f.write(f"```json\\n{json.dumps(safe_inputs_to_log, indent=2, ensure_ascii=False)}\\n```\\n\\n")
+                f.write("## Resultado da Crew:\\n\\n")
+                if isinstance(resultado, str):
+                    f.write(resultado)
+                else:
+                    # Se o resultado não for uma string (ex: objeto complexo), converter para string
+                    f.write(str(resultado))
+            
+            print(f"INFO: Resultado da crew salvo em: {file_path}")
+
+        except Exception as e_save:
+            print(f"AVISO: Falha ao salvar o resultado da crew em arquivo: {e_save}")
+
     except Exception as e:
         print(f"ERRO: Uma exceção ocorreu durante a execução da crew: {e}")
         import traceback
